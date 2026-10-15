@@ -1,4 +1,4 @@
-import { GoogleGenAI, Type } from "@google/genai";
+import Groq from "groq-sdk";
 import { NextResponse } from "next/server";
 
 export async function POST(req: Request) {
@@ -9,74 +9,32 @@ export async function POST(req: Request) {
       return NextResponse.json({ error: "Envie anotações ou anexe um ficheiro" }, { status: 400 });
     }
 
-    const ai = new GoogleGenAI({ apiKey: process.env.GEMINI_API_KEY });
+    const groq = new Groq({ apiKey: process.env.GROQ_API_KEY });
+    const idiomaTexto = idioma === 'en' ? 'English' : idioma === 'fr' ? 'Français' : 'Português';
 
-    const TopicSchema = {
-      type: Type.OBJECT,
-      properties: {
-        titulo: { 
-          type: Type.STRING, 
-          description: "Título formal do tema tratado" 
-        },
-        palavras_chave: {
-          type: Type.ARRAY,
-          items: { type: Type.STRING },
-          description: "4 a 6 termos técnicos essenciais" 
-        },
-        pergunta_gatilho_cornell: {
-          type: Type.STRING,
-          description: "Pergunta reflexiva para o método Cornell."
-        },
-        definicao_central: {
-          type: Type.STRING,
-          description: "Fundamentação teórica rigorosa e detalhada integrando texto e anexo."
-        },
-        tipo_layout_visual: {
-          type: Type.STRING,
-          description: "Escolha: 'fluxo' ou 'hierarquico'."
-        },
-        etapas_fluxo: {
-          type: Type.ARRAY,
-          items: { type: Type.STRING },
-          description: "Sequência detalhada de causa e efeito (3 a 5 etapas)."
-        },
-        subtopicos_hierarquicos: {
-          type: Type.ARRAY,
-          items: {
-            type: Type.OBJECT,
-            properties: {
-              termo_destaque: { type: Type.STRING, description: "Termo de destaque para marcador" },
-              explicacao_curta: { type: Type.STRING, description: "Explicação clara e aprofundada." }
-            },
-            required: ["termo_destaque", "explicacao_curta"]
-          },
-          description: "Subtópicos aprofundados."
-        },
-        resumo_mini_cornell: {
-          type: Type.STRING,
-          description: "Síntese em uma frase no rodapé do bloco."
-        },
-        destaque_prova: { 
-          type: Type.STRING, 
-          description: "Pegadinha de exame ou detalhe crítico relevante." 
-        }
-      },
-      required: [
-        "titulo", 
-        "palavras_chave", 
-        "definicao_central", 
-        "tipo_layout_visual", 
-        "subtopicos_hierarquicos", 
-        "destaque_prova"
-      ]
-    };
+    const jsonFormatInstructions = `
+Você é um professor e pesquisador de alto nível.
+Sua resposta DEVE ser estritamente um JSON válido (sem tags markdown de código \`\`\`json, apenas o JSON puro) seguindo este esquema:
+{
+"titulo": "Título formal do tema tratado",
+"palavras_chave": ["termo1", "termo2", "termo3", "termo4"],
+"pergunta_gatilho_cornell": "Pergunta reflexiva de alto nível",
+"definicao_central": "Fundamentação teórica rigorosa e detalhada integrando texto e anexo.",
+"tipo_layout_visual": "fluxo ou hierarquico",
+"etapas_fluxo": ["Etapa 1", "Etapa 2", "Etapa 3"],
+"subtopicos_hierarquicos": [
+{ "termo_destaque": "Conceito 1", "explicacao_curta": "Explicação profunda." },
+{ "termo_destaque": "Conceito 2", "explicacao_curta": "Explicação profunda." }
+],
+"resumo_mini_cornell": "Síntese de uma frase no rodapé do bloco.",
+"destaque_prova": "Pegadinha de exame ou detalhe crítico relevante."
+}
+Todo o conteúdo DEVE estar estritamente no idioma: ${idiomaTexto}.
+`;
 
-    const idiomaTexto = idioma === 'en' ? 'Inglês' : idioma === 'fr' ? 'Francês' : 'Português';
-
-    const promptText = `
+    const userPrompt = `
 Contexto / Disciplina: ${disciplina || "Geral"}
 Método de Estudo: ${metodo || "cornell"}
-IDIOMA OBRIGATÓRIO DE RESPOSTA: Responda TODO o conteúdo estritamente em ${idiomaTexto}.
 
 [ANOTAÇÕES DO ESTUDANTE]:
 """
@@ -84,57 +42,53 @@ ${notasBrutas || "Analise o anexo com profundidade conceitual completa."}
 """
 
 DIRETRIZES:
-1. Analise os tópicos enviados de forma completa e profunda, sem cortes.
+1. Analise de forma completa e profunda, sem cortes.
 2. Integre os conceitos visuais do anexo, caso exista.
-3. Todo o vocabulário, títulos e termos no JSON Schema devem estar em ${idiomaTexto}.
 `;
 
-    const contents: any[] = [promptText];
+    // Se houver imagem anexada, usa o modelo de visão; se for só texto, usa o Llama 3.3 70B
+    let model = "llama-3.3-70b-versatile";
+    const messages: any[] = [
+      { role: "system", content: jsonFormatInstructions }
+    ];
 
-    if (arquivoBase64 && mimeType) {
-      contents.push({
-        inlineData: {
-          data: arquivoBase64,
-          mimeType: mimeType
-        }
+    if (arquivoBase64 && mimeType && mimeType.startsWith("image/")) {
+      model = "llama-3.2-11b-vision-preview";
+      messages.push({
+        role: "user",
+        content: [
+          { type: "text", text: userPrompt },
+          {
+            type: "image_url",
+            image_url: {
+              url: `data:${mimeType};base64,${arquivoBase64}`
+            }
+          }
+        ]
+      });
+    } else {
+      messages.push({
+        role: "user",
+        content: userPrompt
       });
     }
 
-    const config = {
-      systemInstruction: `Você é um professor e investigador académico de alto nível. Responda estritamente no formato JSON Schema fornecido e no idioma ${idiomaTexto}.`,
-      responseMimeType: "application/json",
-      responseSchema: TopicSchema,
-      temperature: 0.2
-    };
+    const chatCompletion = await groq.chat.completions.create({
+      model,
+      messages,
+      temperature: 0.2,
+      response_format: { type: "json_object" }
+    });
 
-    let response = null;
-    let ultimoErro = null;
-    const maxTentativas = 3;
+    const rawContent = chatCompletion.choices[0]?.message?.content || "{}";
+    const data = JSON.parse(rawContent);
 
-    for (let tentativa = 1; tentativa <= maxTentativas; tentativa++) {
-      try {
-        response = await ai.models.generateContent({
-          model: "gemini-3.8-flash",
-          contents,
-          config
-        });
-        if (response?.text) break;
-      } catch (err: any) {
-        ultimoErro = err;
-        if (tentativa < maxTentativas) {
-          await new Promise((resolve) => setTimeout(resolve, tentativa * 1200));
-        }
-      }
-    }
-
-    if (!response?.text) {
-      throw ultimoErro || new Error("Serviço temporariamente ocupado. Tente novamente em instantes.");
-    }
-
-    const data = JSON.parse(response.text);
     return NextResponse.json(data);
   } catch (error: any) {
-    console.error("Erro no consolidate-topic:", error);
-    return NextResponse.json({ error: error?.message || "Erro ao processar conteúdo" }, { status: 500 });
+    console.error("Erro no Groq consolidate-topic:", error);
+    return NextResponse.json(
+      { error: error?.message || "Erro ao processar conteúdo com Groq" },
+      { status: 500 }
+    );
   }
 }
