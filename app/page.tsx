@@ -1102,39 +1102,70 @@ export default function Home() {
 
       </main>
 
-      {/* REGRAS DE IMPRESSÃO */}
+      {/* REGRAS DE IMPRESSÃO / PDF MULTI-PÁGINAS CORRIGIDAS */}
       <style jsx global>{`
         @media print {
-          .no-print, header, nav, section:first-of-type {
+          /* 1. Oculta tudo o que não deve sair na folha */
+          .no-print, 
+          header, 
+          nav, 
+          section:first-of-type {
             display: none !important;
           }
-          body, html {
+
+          /* 2. Destrava alturas e rolagens da raiz e dos containers pais */
+          html, 
+          body, 
+          div[class*="h-screen"],
+          main, 
+          section {
+            height: auto !important;
+            min-height: auto !important;
+            max-height: none !important;
+            overflow: visible !important;
+            position: static !important;
             background-color: #ffffff !important;
             margin: 0 !important;
             padding: 0 !important;
-            height: auto !important;
-            overflow: visible !important;
           }
+
+          /* 3. Garante que a coluna direita ocupe a largura completa sem grid/flex */
           main {
             display: block !important;
-            height: auto !important;
-            overflow: visible !important;
           }
-          section {
+
+          section.lg\\:col-span-7 {
             width: 100% !important;
+            max-width: 100% !important;
+            display: block !important;
             padding: 0 !important;
-            background: #ffffff !important;
-            height: auto !important;
-            overflow: visible !important;
+            margin: 0 !important;
           }
-          article {
-            break-inside: avoid;
-            page-break-inside: avoid;
+
+          /* 4. A folha A4 não pode ter limites de tamanho na impressão */
+          div[class*="max-w-3xl"] {
+            max-width: 100% !important;
+            width: 100% !important;
             box-shadow: none !important;
-            border: 1px solid #e2e8f0 !important;
-            margin-bottom: 1.5rem !important;
+            border: none !important;
+            padding: 0 !important;
+            margin: 0 !important;
+            min-height: auto !important;
+            display: block !important;
           }
-          mark {
+
+          /* 5. Regras para evitar que tópicos fiquem cortados ao meio entre duas folhas */
+          article {
+            break-inside: avoid-page !important;
+            page-break-inside: avoid !important;
+            box-shadow: none !important;
+            border: 1px solid #cbd5e1 !important;
+            margin-bottom: 2rem !important;
+            display: block !important;
+          }
+
+          /* 6. Preserva as cores dos marca-textos e destaques na impressão */
+          mark, span, div {
             -webkit-print-color-adjust: exact !important;
             print-color-adjust: exact !important;
           }
