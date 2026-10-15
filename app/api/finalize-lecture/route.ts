@@ -40,30 +40,32 @@ Disciplina: ${disciplina || "Geral"}
 Tópicos consolidados:
 ${JSON.stringify(topicosAcumulados, null, 2)}
 
-Sintetize a aula e elabore 3 a 5 flashcards de alto impacto acadêmico para memorização ativa.
+Sintetize a aula e crie de 3 a 5 flashcards de alto impacto para memorização ativa.
 `;
 
     const config = {
-      systemInstruction: "Você é um especialista em Active Recall acadêmico. Responda estritamente no JSON Schema fornecido.",
+      systemInstruction: "Você é um especialista em síntese académica e Active Recall. Responda estritamente no JSON Schema fornecido.",
       responseMimeType: "application/json",
       responseSchema: FinalizeSchema,
       temperature: 0.2
     };
 
-    const modelosDisponiveis = ["gemini-2.0-flash-lite", "gemini-2.0-flash"];
     let response = null;
     let ultimoErro = null;
 
-    for (const model of modelosDisponiveis) {
+    for (let tentativa = 1; tentativa <= 3; tentativa++) {
       try {
         response = await ai.models.generateContent({
-          model,
+          model: "gemini-3.8-flash",
           contents: prompt,
           config
         });
         if (response?.text) break;
       } catch (err: any) {
         ultimoErro = err;
+        if (tentativa < 3) {
+          await new Promise((resolve) => setTimeout(resolve, tentativa * 1000));
+        }
       }
     }
 
