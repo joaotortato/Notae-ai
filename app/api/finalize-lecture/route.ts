@@ -9,15 +9,15 @@ export async function POST(req: Request) {
     const idiomaTexto = idioma === 'en' ? 'English' : idioma === 'fr' ? 'Français' : 'Português';
 
     const systemPrompt = `
-Você é um especialista em síntese acadêmica e Active Recall.
-Sua resposta DEVE ser estritamente um JSON válido (sem blocos markdown, apenas o JSON puro) no formato:
+Você é um estudante de alto rendimento acadêmico especialista em síntese técnica e Active Recall.
+Sua resposta DEVE ser estritamente um JSON válido (sem blocos de código markdown, apenas o JSON puro) no formato:
 {
-"resumo_executivo": "Síntese densa conectando todos os tópicos vistos na aula.",
-"flashcards": [
-{ "frente": "Pergunta desafiadora?", "verso": "Resposta precisa." },
-{ "frente": "Pergunta desafiadora 2?", "verso": "Resposta precisa 2." },
-{ "frente": "Pergunta desafiadora 3?", "verso": "Resposta precisa 3." }
-]
+  "resumo_executivo": "Síntese densa conectando todos os tópicos vistos na aula de forma lógica e articulada.",
+  "flashcards": [
+    { "frente": "Pergunta reflexiva de alto impacto para fixação?", "verso": "Resposta técnica direta e fundamentada." },
+    { "frente": "Segunda pergunta crítica sobre critérios ou fórmulas?", "verso": "Resposta precisa com definições claras." },
+    { "frente": "Terceira pergunta sobre armadilhas conceituais de exame?", "verso": "Explicação do cuidado prático necessário." }
+  ]
 }
 Idioma obrigatório: ${idiomaTexto}.
 `;
@@ -27,22 +27,36 @@ Disciplina: ${disciplina || "Geral"}
 Tópicos consolidados:
 ${JSON.stringify(topicosAcumulados, null, 2)}
 
-Sintetize a aula e crie de 3 a 5 flashcards de alto impacto acadêmico.
+Sintetize a aula e elabore de 3 a 5 flashcards de alto impacto acadêmico.
 `;
 
-    const chatCompletion = await groq.chat.completions.create({
-      model: "llama-3.3-70b-versatile",
-      messages: [
-        { role: "system", content: systemPrompt },
-        { role: "user", content: userPrompt }
-      ],
-      temperature: 0.2,
-      response_format: { type: "json_object" }
-    });
+    const modelosParaTentar = ["llama-3.1-8b-instant", "openai/gpt-oss-120b", "openai/gpt-oss-20b"];
+    let rawContent = "";
+    let ultimoErro = null;
 
-    const rawContent = chatCompletion.choices[0]?.message?.content || "{}";
+    for (const model of modelosParaTentar) {
+      try {
+        const chatCompletion = await groq.chat.completions.create({
+          model,
+          messages: [
+            { role: "system", content: systemPrompt },
+            { role: "user", content: userPrompt }
+          ],
+          temperature: 0.2,
+          response_format: { type: "json_object" }
+        });
+        rawContent = chatCompletion.choices[0]?.message?.content || "";
+        if (rawContent) break;
+      } catch (err: any) {
+        ultimoErro = err;
+      }
+    }
+
+    if (!rawContent) {
+      throw ultimoErro || new Error("Erro ao sintetizar aula com Groq");
+    }
+
     const data = JSON.parse(rawContent);
-
     return NextResponse.json(data);
   } catch (error: any) {
     console.error("Erro no Groq finalize-lecture:", error);
