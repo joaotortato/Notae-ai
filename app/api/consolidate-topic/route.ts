@@ -13,47 +13,63 @@ export async function POST(req: Request) {
     const idiomaTexto = idioma === 'en' ? 'English' : idioma === 'fr' ? 'Français' : 'Português';
 
     const jsonFormatInstructions = `
-Você é um professor e pesquisador de alto nível.
-Sua resposta DEVE ser estritamente um JSON válido (sem tags markdown de código \`\`\`json, apenas o JSON puro) seguindo este esquema:
+Você é um estudante universitário de elite (Engenharia e Ciências Exatas em instituição de alto nível acadêmico).
+Seu objetivo é transformar anotações rápidas de aula, rascunhos e imagens em anotações de caderno impecáveis, organizadas e de alto rigor conceitual.
+
+PERFIL DE REGISTO:
+1. RIGOR E SÍNTESE EFICIENTE: Não use enrolação nem introduções óbvias. Vá direto ao cerne teórico do que o professor explicou.
+2. APROFUNDAMENTO TÉCNICO: Complete lacunas lógicas deixadas pelas notas rápidas. Se o tópico envolver fórmulas matemáticas, equações de equilíbrio, grandezas físicas ou parâmetros normativos, descreva-os com precisão e destaque as suas relações.
+3. LEGIBILIDADE PARA REVISÃO RÁPIDA: Ao bater o olho no caderno antes de uma prova, o estudante deve recordar imediatamente a linha de raciocínio da aula, os conceitos-chave e as armadilhas conceituais.
+4. INTEGRAÇÃO VISUAL: Se houver imagem (slide, esquema estrutural, quadro ou diagrama), extraia todos os detalhes técnicos, variáveis e etapas representadas.
+
+Sua resposta DEVE ser estritamente um JSON válido (sem blocos markdown \`\`\`json, apenas o JSON puro) seguindo este esquema:
 {
-"titulo": "Título formal do tema tratado",
-"palavras_chave": ["termo1", "termo2", "termo3", "termo4"],
-"pergunta_gatilho_cornell": "Pergunta reflexiva de alto nível",
-"definicao_central": "Fundamentação teórica rigorosa e detalhada integrando texto e anexo.",
-"tipo_layout_visual": "fluxo ou hierarquico",
-"etapas_fluxo": ["Etapa 1", "Etapa 2", "Etapa 3"],
-"subtopicos_hierarquicos": [
-{ "termo_destaque": "Conceito 1", "explicacao_curta": "Explicação profunda." },
-{ "termo_destaque": "Conceito 2", "explicacao_curta": "Explicação profunda." }
-],
-"resumo_mini_cornell": "Síntese de uma frase no rodapé do bloco.",
-"destaque_prova": "Pegadinha de exame ou detalhe crítico relevante."
+  "titulo": "Título técnico preciso e contextualizado do tópico da aula",
+  "palavras_chave": ["Termo Técnico 1", "Conceito 2", "Variável/Equação 3", "Parâmetro 4"],
+  "pergunta_gatilho_cornell": "Pergunta reflexiva incisiva que obriga a recordar a mecânica teórica central do tópico",
+  "definicao_central": "Fundamentação teórica concisa, densa e clara. Explique o conceito, o 'porquê' físico/teórico e inclua formulações ou definições essenciais.",
+  "tipo_layout_visual": "fluxo ou hierarquico",
+  "etapas_fluxo": ["1. Causa / Condição inicial", "2. Mecanismo / Transformação física ou lógica", "3. Consequência / Estado final"],
+  "subtopicos_hierarquicos": [
+    { 
+      "termo_destaque": "Conceito Chave / Variável", 
+      "explicacao_curta": "Definição técnica direta, comportamento esperado ou fórmula associada." 
+    },
+    { 
+      "termo_destaque": "Condição Crítica / Hipótese", 
+      "explicacao_curta": "Como este elemento altera a análise ou o dimensionamento no contexto da aula." 
+    }
+  ],
+  "resumo_mini_cornell": "Síntese de uma frase condensando a regra de ouro do tópico para consulta rápida.",
+  "destaque_prova": "Atenção a exames: pegadinha comum, erro de hipótese simplificadora, detalhe de sinal/unidade ou interpretação que o professor costuma cobrar em avaliações."
 }
-Todo o conteúdo DEVE estar estritamente no idioma: ${idiomaTexto}.
+
+Todo o conteúdo gerado DEVE estar estritamente no idioma: ${idiomaTexto}.
 `;
 
-    const userPrompt = `
+        const userPrompt = `
 Contexto / Disciplina: ${disciplina || "Geral"}
 Método de Estudo: ${metodo || "cornell"}
 
-[ANOTAÇÕES DO ESTUDANTE]:
+[REGISTO BRUTO DA AULA / DADOS RECEBIDOS]:
 """
-${notasBrutas || "Analise o anexo com profundidade conceitual completa."}
+${notasBrutas || "Analise a imagem/anexo técnico anexado com total rigor e profundidade conceitual."}
 """
 
-DIRETRIZES:
-1. Analise de forma completa e profunda, sem cortes.
-2. Integre os conceitos visuais do anexo, caso exista.
+DIRETRIZES DE PROCESSAMENTO:
+- Transcreva e estruture o raciocínio da aula como um colega de turma exemplar.
+- Aprofunde o suficiente para consolidar o entendimento teórico e prático do assunto.
+- Destaque termos-chave, formulações e critérios decisivos de projeto/análise.
 `;
 
-    // Se houver imagem anexada, usa o modelo de visão; se for só texto, usa o Llama 3.3 70B
     let model = "llama-3.3-70b-versatile";
     const messages: any[] = [
       { role: "system", content: jsonFormatInstructions }
     ];
 
     if (arquivoBase64 && mimeType && mimeType.startsWith("image/")) {
-      model = "llama-3.2-11b-vision-preview";
+      // Modelo ativo com suporte multimodal no Groq
+      model = "llama-3.2-90b-vision-preview";
       messages.push({
         role: "user",
         content: [

@@ -255,6 +255,17 @@ export default function Home() {
       setItensEmProcessamento(prev => Math.max(0, prev - 1));
     }
   };
+  useEffect(() => {
+    const handleKeyDownGlobal = (e: KeyboardEvent) => {
+      if ((e.ctrlKey || e.metaKey) && e.key === 'Enter') {
+        e.preventDefault();
+        handleConsolidar();
+      }
+    };
+
+    window.addEventListener('keydown', handleKeyDownGlobal);
+    return () => window.removeEventListener('keydown', handleKeyDownGlobal);
+  }, [notasAtuais, arquivo, disciplina, idioma, metodoPadrao]);
 
   const handleTrocarModoTopico = (id: string, novoModo: 'cornell' | 'topicos' | 'visual') => {
     setTopicos(prev => prev.map(t => t.id === id ? { ...t, modoExibicao: novoModo } : t));
