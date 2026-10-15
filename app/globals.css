@@ -1,0 +1,12 @@
+@import "tailwindcss";
+
+/* Força texto preto legível e fundo branco puro em todos os campos de digitação */
+input, textarea {
+  color: #0f172a !important; /* preto ardósia */
+  background-color: #ffffff !important;
+  opacity: 1 !important;
+}
+
+input::placeholder, textarea::placeholder {
+  color: #94a3b8 !important; /* cinza visível para exemplos */
+}
