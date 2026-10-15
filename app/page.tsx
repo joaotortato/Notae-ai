@@ -526,8 +526,8 @@ export default function Home() {
                   <span 
                     contentEditable 
                     suppressContentEditableWarning
-                    placeholder="Nome da Disciplina"
-                    className={`text-[11px] font-extrabold uppercase tracking-widest outline-none focus:bg-slate-50 p-1 rounded empty:before:content-[attr(placeholder)] empty:before:text-slate-300 ${estiloAtual.accent}`}
+                    data-placeholder="Nome da Disciplina"
+                    className={`text-[11px] font-extrabold uppercase tracking-widest outline-none focus:bg-slate-50 p-1 rounded empty:before:content-[attr(data-placeholder)] empty:before:text-slate-300 ${estiloAtual.accent}`}
                   >
                     {disciplina}
                   </span>
@@ -551,8 +551,8 @@ export default function Home() {
                 <h1 
                   contentEditable 
                   suppressContentEditableWarning
-                  placeholder="Título da Aula / Assunto Principal"
-                  className="text-2xl lg:text-3xl font-extrabold text-slate-900 mt-2 leading-tight outline-none focus:bg-slate-50 p-1 rounded empty:before:content-[attr(placeholder)] empty:before:text-slate-300"
+                  data-placeholder="Título da Aula / Assunto Principal"
+                  className="text-2xl lg:text-3xl font-extrabold text-slate-900 mt-2 leading-tight outline-none focus:bg-slate-50 p-1 rounded empty:before:content-[attr(data-placeholder)] empty:before:text-slate-300"
                 >
                   {tituloAula}
                 </h1>
