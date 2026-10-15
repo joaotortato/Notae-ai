@@ -3,9 +3,9 @@
 import React, { useState, useEffect, useRef } from 'react';
 import { 
   BookOpen, Sparkles, Download, CheckCircle2, Trash2, 
-  Palette, Lightbulb, ArrowRight, Check,
+  Palette, Lightbulb, ArrowRight, FolderPlus, Folder, RotateCcw,
   Workflow, HelpCircle, Columns, ListTree, Upload, X, Image as ImageIcon, FileText,
-  Bold, Italic, Underline, Type as TypeIcon
+  Bold, Italic, Underline, Type as TypeIcon, Globe, Clipboard
 } from 'lucide-react';
 
 interface Subtopico {
@@ -33,6 +33,14 @@ export default function Home() {
   const [tituloAula, setTituloAula] = useState('');
   const [dataAula, setDataAula] = useState('');
 
+  // Pastas em memória local
+  const [pastas, setPastas] = useState<string[]>([]);
+  const [novaPasta, setNovaPasta] = useState('');
+  const [mostrarCriarPasta, setMostrarCriarPasta] = useState(false);
+
+  // Idioma selecionado
+  const [idioma, setIdioma] = useState<'pt' | 'en' | 'fr'>('pt');
+
   useEffect(() => {
     setDataAula(
       new Date().toLocaleDateString('pt-BR', {
@@ -41,7 +49,40 @@ export default function Home() {
         year: 'numeric'
       })
     );
+
+    const pastasSalvas = localStorage.getItem('notae_pastas');
+    if (pastasSalvas) {
+      try {
+        setPastas(JSON.parse(pastasSalvas));
+      } catch (e) {
+        console.error("Erro ao carregar pastas:", e);
+      }
+    }
   }, []);
+
+  const salvarPastas = (novas: string[]) => {
+    setPastas(novas);
+    localStorage.setItem('notae_pastas', JSON.stringify(novas));
+  };
+
+  const handleAdicionarPasta = () => {
+    if (!novaPasta.trim()) return;
+    const nomeLimpo = novaPasta.trim();
+    if (!pastas.includes(nomeLimpo)) {
+      const atualizadas = [...pastas, nomeLimpo];
+      salvarPastas(atualizadas);
+      setDisciplina(nomeLimpo);
+    }
+    setNovaPasta('');
+    setMostrarCriarPasta(false);
+  };
+
+  const handleRemoverPasta = (nome: string, e: React.MouseEvent) => {
+    e.stopPropagation();
+    const atualizadas = pastas.filter(p => p !== nome);
+    salvarPastas(atualizadas);
+    if (disciplina === nome) setDisciplina('');
+  };
 
   const [notasAtuais, setNotasAtuais] = useState('');
   const [itensEmProcessamento, setItensEmProcessamento] = useState<number>(0);
@@ -90,6 +131,7 @@ export default function Home() {
     document.execCommand(comando, false, valor);
   };
 
+  // Suporte a Arquivo via Seleção Local
   const handleFileChange = (e: React.ChangeEvent<HTMLInputElement>) => {
     const file = e.target.files?.[0];
     if (!file) return;
@@ -107,9 +149,54 @@ export default function Home() {
     reader.readAsDataURL(file);
   };
 
+  // Suporte a Colar Imagem da Área de Transferência (Ctrl + V / Print)
+  const processarItemClipboard = (item: DataTransferItem) => {
+    if (item.type.indexOf('image') !== -1) {
+      const file = item.getAsFile();
+      if (!file) return;
+
+      const reader = new FileReader();
+      reader.onload = () => {
+        const result = reader.result as string;
+        const base64Clean = result.split(',')[1];
+        setArquivo({
+          nome: `Captura_${new Date().toLocaleTimeString().replace(/:/g, '-')}.png`,
+          base64: base64Clean,
+          mimeType: file.type
+        });
+      };
+      reader.readAsDataURL(file);
+    }
+  };
+
+  const handlePasteArea = (e: React.ClipboardEvent) => {
+    const items = e.clipboardData?.items;
+    if (!items) return;
+    for (let i = 0; i < items.length; i++) {
+      if (items[i].type.indexOf('image') !== -1) {
+        processarItemClipboard(items[i]);
+        break;
+      }
+    }
+  };
+
   const handleRemoverArquivo = () => {
     setArquivo(null);
     if (fileInputRef.current) fileInputRef.current.value = '';
+  };
+
+  // Limpar Documento para Começar Nova Aula
+  const handleLimparDocumento = () => {
+    if (topicos.length === 0 && !resumoExecutivo) return;
+    const confirmacao = window.confirm("Deseja iniciar um novo documento em branco? Todo o conteúdo gerado nesta aula será limpo.");
+    if (confirmacao) {
+      setTopicos([]);
+      setResumoExecutivo('');
+      setFlashcards([]);
+      setTituloAula('');
+      setNotasAtuais('');
+      handleRemoverArquivo();
+    }
   };
 
   const handleConsolidar = async () => {
@@ -119,6 +206,7 @@ export default function Home() {
     const arquivoParaEnviar = arquivo;
     const metodoEscolhido = metodoPadrao;
     const disciplinaAtual = disciplina;
+    const idiomaEscolhido = idioma;
 
     setNotasAtuais('');
     handleRemoverArquivo();
@@ -133,7 +221,8 @@ export default function Home() {
           notasBrutas: textoParaEnviar,
           metodo: metodoEscolhido,
           arquivoBase64: arquivoParaEnviar?.base64 || null,
-          mimeType: arquivoParaEnviar?.mimeType || null
+          mimeType: arquivoParaEnviar?.mimeType || null,
+          idioma: idiomaEscolhido
         })
       });
 
@@ -188,7 +277,7 @@ export default function Home() {
       const res = await fetch('/api/finalize-lecture', {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({ disciplina, topicosAcumulados: topicos })
+        body: JSON.stringify({ disciplina, topicosAcumulados: topicos, idioma })
       });
 
       const data = await res.json();
@@ -208,21 +297,36 @@ export default function Home() {
   };
 
   return (
-    <div className="h-screen bg-slate-100 flex flex-col font-sans overflow-hidden">
+    <div className="h-screen bg-slate-100 flex flex-col font-sans overflow-hidden" onPaste={handlePasteArea}>
       
       {/* BARRA SUPERIOR FIXA */}
-      <header className="no-print bg-white border-b border-slate-200 px-6 py-3 flex flex-wrap items-center justify-between gap-4 shrink-0 shadow-xs z-30">
+      <header className="no-print bg-white border-b border-slate-200 px-6 py-2.5 flex flex-wrap items-center justify-between gap-3 shrink-0 shadow-xs z-30">
         <div className="flex items-center gap-3">
           <div className="w-9 h-9 bg-indigo-600 rounded-lg flex items-center justify-center text-white font-bold shadow-xs">
             N
           </div>
           <div>
             <h1 className="text-base font-bold text-slate-900 leading-tight">Notae AI</h1>
-            <p className="text-xs text-slate-500">Caderno Inteligente Acadêmico</p>
+            <p className="text-xs text-slate-500">Caderno Inteligente Académico</p>
           </div>
         </div>
 
-        <div className="flex flex-wrap items-center gap-3">
+        <div className="flex flex-wrap items-center gap-2.5">
+          {/* Seletor de Idioma */}
+          <div className="flex items-center bg-slate-100 px-2 py-1 rounded-lg border border-slate-200 text-xs">
+            <Globe className="w-3.5 h-3.5 mr-1.5 text-slate-500" />
+            <select 
+              value={idioma}
+              onChange={(e) => setIdioma(e.target.value as 'pt' | 'en' | 'fr')}
+              className="bg-transparent text-slate-700 font-semibold outline-none cursor-pointer"
+            >
+              <option value="pt">Português</option>
+              <option value="en">English</option>
+              <option value="fr">Français</option>
+            </select>
+          </div>
+
+          {/* Formato Padrão dos Cards */}
           <div className="flex items-center bg-slate-100 p-1 rounded-lg border border-slate-200 text-xs">
             <span className="text-[10px] font-bold text-slate-400 uppercase tracking-wider mx-2">
               Padronizar:
@@ -259,6 +363,7 @@ export default function Home() {
             </button>
           </div>
 
+          {/* Seletor de Tema */}
           <div className="flex items-center bg-slate-100 p-1 rounded-lg border border-slate-200 text-xs">
             <Palette className="w-3.5 h-3.5 mx-1.5 text-slate-500" />
             <button 
@@ -281,6 +386,18 @@ export default function Home() {
             </button>
           </div>
 
+          {/* Botão de Limpar Documento (Nova Aula) */}
+          <button
+            type="button"
+            onClick={handleLimparDocumento}
+            title="Limpar o caderno para iniciar uma nova aula do zero"
+            className="flex items-center gap-1.5 px-3 py-2 bg-slate-200 hover:bg-rose-100 hover:text-rose-700 text-slate-700 rounded-lg text-xs font-semibold transition cursor-pointer"
+          >
+            <RotateCcw className="w-3.5 h-3.5" />
+            Nova Aula
+          </button>
+
+          {/* Botão Baixar PDF */}
           <button
             type="button"
             onClick={handleExportPDF}
@@ -293,12 +410,79 @@ export default function Home() {
         </div>
       </header>
 
-      {/* ÁREA PRINCIPAL: DIVISÃO COM ROLAGEM INDEPENDENTE */}
-      <main className="flex-1 grid grid-cols-1 lg:grid-cols-12 gap-0 overflow-hidden h-[calc(100vh-61px)]">
+      {/* ÁREA PRINCIPAL */}
+      <main className="flex-1 grid grid-cols-1 lg:grid-cols-12 gap-0 overflow-hidden h-[calc(100vh-57px)]">
         
-        {/* COLUNA ESQUERDA: ENTRADA COM ROLAGEM PRÓPRIA */}
+        {/* COLUNA ESQUERDA: CAPTURA E PASTAS */}
         <section className="no-print lg:col-span-5 bg-white border-r border-slate-200 p-6 flex flex-col justify-between overflow-y-auto h-full">
           <div className="space-y-4">
+            
+            {/* SISTEMA DE PASTAS / MATÉRIAS */}
+            <div className="bg-slate-50 border border-slate-200 p-3.5 rounded-xl space-y-2.5">
+              <div className="flex items-center justify-between">
+                <span className="text-[11px] font-bold text-slate-600 flex items-center gap-1.5 uppercase tracking-wider">
+                  <Folder className="w-3.5 h-3.5 text-indigo-600" /> Minhas Matérias
+                </span>
+                <button
+                  type="button"
+                  onClick={() => setMostrarCriarPasta(!mostrarCriarPasta)}
+                  className="text-xs font-semibold text-indigo-600 hover:text-indigo-800 flex items-center gap-1 cursor-pointer"
+                >
+                  <FolderPlus className="w-3.5 h-3.5" /> Nova Matéria
+                </button>
+              </div>
+
+              {mostrarCriarPasta && (
+                <div className="flex items-center gap-2 pt-1">
+                  <input
+                    type="text"
+                    value={novaPasta}
+                    onChange={(e) => setNovaPasta(e.target.value)}
+                    onKeyDown={(e) => e.key === 'Enter' && handleAdicionarPasta()}
+                    placeholder="Nome da matéria (ex: Cálculo II)..."
+                    className="flex-1 text-xs p-2 rounded-lg border border-slate-300 bg-white outline-none focus:border-indigo-600"
+                  />
+                  <button
+                    type="button"
+                    onClick={handleAdicionarPasta}
+                    className="px-3 py-2 bg-indigo-600 hover:bg-indigo-700 text-white rounded-lg text-xs font-semibold cursor-pointer"
+                  >
+                    Salvar
+                  </button>
+                </div>
+              )}
+
+              {pastas.length > 0 ? (
+                <div className="flex flex-wrap gap-1.5 pt-1">
+                  {pastas.map((p, idx) => (
+                    <button
+                      key={idx}
+                      type="button"
+                      onClick={() => setDisciplina(p)}
+                      className={`text-xs px-2.5 py-1 rounded-md border flex items-center gap-1.5 transition cursor-pointer ${
+                        disciplina === p 
+                          ? 'bg-indigo-600 text-white border-indigo-600 shadow-2xs font-semibold' 
+                          : 'bg-white text-slate-700 border-slate-300 hover:border-indigo-400'
+                      }`}
+                    >
+                      <span>{p}</span>
+                      <span 
+                        onClick={(e) => handleRemoverPasta(p, e)}
+                        className="hover:text-rose-300 text-slate-400 text-[10px]"
+                        title="Remover matéria"
+                      >
+                        ×
+                      </span>
+                    </button>
+                  ))}
+                </div>
+              ) : (
+                <p className="text-[11px] text-slate-400 italic">
+                  Crie matérias para preencher o cabeçalho automaticamente com um clique.
+                </p>
+              )}
+            </div>
+
             <div className="flex items-center justify-between">
               <div>
                 <span className="text-[11px] font-bold uppercase tracking-wider text-indigo-600 bg-indigo-50 px-2 py-0.5 rounded">
@@ -320,7 +504,7 @@ export default function Home() {
                   type="text" 
                   value={disciplina} 
                   onChange={(e) => setDisciplina(e.target.value)}
-                  placeholder="Ex: Engenharia Estrutural"
+                  placeholder="Selecione acima ou digite..."
                   className="w-full text-xs p-2.5 rounded-lg border border-slate-300 bg-white text-slate-900 focus:outline-indigo-600 font-medium" 
                 />
               </div>
@@ -350,14 +534,18 @@ export default function Home() {
                     handleConsolidar();
                   }
                 }}
-                placeholder="Digite suas anotações, palavras-chave ou fórmulas aqui. Pressione Ctrl + Enter para enviar e continue digitando..."
+                placeholder="Escreva anotações ou termos-chave. Use Ctrl + Enter para enviar..."
                 className="w-full text-xs p-3 rounded-lg border border-slate-300 bg-white text-slate-900 focus:outline-indigo-600 resize-none leading-relaxed font-sans"
               />
             </div>
 
+            {/* ÁREA DE ANEXO E COLAGEM (CTRL + V) */}
             <div className="space-y-2">
-              <label className="text-[11px] font-semibold text-slate-600 block">
-                Anexo Multimodal (Opcional)
+              <label className="text-[11px] font-semibold text-slate-600 flex items-center justify-between">
+                <span>Anexo Multimodal</span>
+                <span className="text-[10px] text-indigo-600 font-normal flex items-center gap-1">
+                  <Clipboard className="w-3 h-3" /> Pode colar prints diretamente com Ctrl + V
+                </span>
               </label>
               
               <input 
@@ -375,7 +563,7 @@ export default function Home() {
                   className="w-full border-2 border-dashed border-slate-300 hover:border-indigo-400 p-3 rounded-xl text-center flex flex-col items-center justify-center gap-1 transition cursor-pointer bg-slate-50/50"
                 >
                   <Upload className="w-4 h-4 text-slate-500" />
-                  <span className="text-xs font-semibold text-slate-700">Anexar Slide, Quadro ou PDF</span>
+                  <span className="text-xs font-semibold text-slate-700">Anexar ou Colar Imagem/Slide (Ctrl + V)</span>
                 </button>
               ) : (
                 <div className="flex items-center justify-between p-2.5 bg-indigo-50 border border-indigo-200 rounded-lg text-xs">
@@ -425,10 +613,10 @@ export default function Home() {
           </div>
         </section>
 
-        {/* COLUNA DIREITA: CADERNO COM ROLAGEM PRÓPRIA E ESPAÇAMENTO INFERIOR AMPLO */}
+        {/* COLUNA DIREITA: CADERNO DE ESTUDOS */}
         <section className="lg:col-span-7 bg-slate-100 p-4 lg:p-8 overflow-y-auto h-full flex flex-col items-center pb-28 print:p-0 print:bg-white print:w-full print:h-auto print:overflow-visible print:pb-0">
           
-          {/* BARRA DE FERRAMENTAS DOCS STICKY TOTALMENTE OPACA */}
+          {/* BARRA DE FERRAMENTAS DOCS STICKY */}
           <div className="no-print w-full max-w-3xl mb-4 bg-white border border-slate-200 rounded-xl px-3 py-2 shadow-xs flex flex-wrap items-center justify-between gap-2 sticky top-0 z-20">
             <div className="flex items-center gap-1 text-slate-700">
               <span className="text-[11px] font-bold uppercase tracking-wider text-slate-400 mr-2 flex items-center gap-1">
@@ -516,11 +704,11 @@ export default function Home() {
             </span>
           </div>
 
-          {/* FOLHA DO CADERNO (COM ALTURA DINÂMICA E MARGEM INFERIOR LIVRE) */}
+          {/* FOLHA DO CADERNO */}
           <div className="w-full max-w-3xl bg-white rounded-xl shadow-md border border-slate-200 p-8 lg:p-10 mb-16 flex flex-col justify-between print:shadow-none print:border-none print:p-0 print:mb-0 print:min-h-0">
             <div>
               
-              {/* CABEÇALHO DO DOCUMENTO COM DATA CRONOLÓGICA */}
+              {/* CABEÇALHO COM DATA CRONOLÓGICA */}
               <div className="border-b-2 border-slate-200 pb-5 mb-6">
                 <div className="flex items-center justify-between gap-3">
                   <span 
@@ -557,7 +745,7 @@ export default function Home() {
                   {tituloAula}
                 </h1>
                 <p className="text-xs text-slate-500 mt-1">
-                  {topicos.length} tópico(s) consolidado(s) • Documento contínuo
+                  {topicos.length} tópico(s) consolidado(s) • Idioma: {idioma.toUpperCase()}
                 </p>
               </div>
 
@@ -584,7 +772,7 @@ export default function Home() {
                   <BookOpen className="w-12 h-12 mx-auto mb-3 opacity-30 text-indigo-600" />
                   <p className="text-sm font-semibold text-slate-600">Seu caderno está pronto e limpo.</p>
                   <p className="text-xs mt-1 text-slate-400">
-                    Insira palavras-chave ou anexe fotos de lousa/slides à esquerda e envie com Ctrl + Enter.
+                    Insira palavras-chave ou cole capturas com Ctrl + V à esquerda e envie com Ctrl + Enter.
                   </p>
                 </div>
               ) : (
@@ -640,7 +828,7 @@ export default function Home() {
                                 topico.modoExibicao === 'visual' ? 'bg-indigo-50 text-indigo-700 font-bold border border-indigo-200' : 'text-slate-500 hover:text-slate-800'
                               }`}
                             >
-                              <Workflow className="w-3 h-3" />
+                              <Workflow className="w-3.5 h-3.5" />
                               <span className="hidden sm:inline">Diagrama</span>
                             </button>
                           </div>
@@ -862,7 +1050,7 @@ export default function Home() {
                 </div>
               )}
 
-              {/* SEÇÃO DE FLASHCARDS CONTÍNUA NO PDF */}
+              {/* SEÇÃO DE FLASHCARDS */}
               {flashcards.length > 0 && (
                 <div className="mt-8 pt-6 border-t-2 border-slate-200">
                   <h3 className="text-xs font-bold text-indigo-900 uppercase tracking-wider mb-4 flex items-center gap-2">
@@ -906,7 +1094,7 @@ export default function Home() {
             </div>
 
             <footer className="border-t border-slate-200 pt-4 mt-8 flex items-center justify-between text-[10px] text-slate-400">
-              <span>Notae AI • Caderno Acadêmico Dinâmico</span>
+              <span>Notae AI • Caderno Académico Dinâmico</span>
               <span>Caderno Oficial de Estudos</span>
             </footer>
           </div>
@@ -914,7 +1102,7 @@ export default function Home() {
 
       </main>
 
-      {/* REGRAS DE IMPRESSÃO / PDF CONTÍNUO */}
+      {/* REGRAS DE IMPRESSÃO */}
       <style jsx global>{`
         @media print {
           .no-print, header, nav, section:first-of-type {

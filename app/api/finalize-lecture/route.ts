@@ -3,7 +3,7 @@ import { NextResponse } from "next/server";
 
 export async function POST(req: Request) {
   try {
-    const { disciplina, topicosAcumulados } = await req.json();
+    const { disciplina, topicosAcumulados, idioma } = await req.json();
 
     const ai = new GoogleGenAI({ apiKey: process.env.GEMINI_API_KEY });
 
@@ -35,8 +35,11 @@ export async function POST(req: Request) {
       required: ["resumo_executivo", "flashcards"]
     };
 
+    const idiomaTexto = idioma === 'en' ? 'Inglês' : idioma === 'fr' ? 'Francês' : 'Português';
+
     const prompt = `
 Disciplina: ${disciplina || "Geral"}
+IDIOMA OBRIGATÓRIO: Gere o resumo e os flashcards em ${idiomaTexto}.
 Tópicos consolidados:
 ${JSON.stringify(topicosAcumulados, null, 2)}
 
@@ -44,7 +47,7 @@ Sintetize a aula e crie de 3 a 5 flashcards de alto impacto para memorização a
 `;
 
     const config = {
-      systemInstruction: "Você é um especialista em síntese académica e Active Recall. Responda estritamente no JSON Schema fornecido.",
+      systemInstruction: `Você é um especialista em síntese académica e Active Recall. Responda estritamente no JSON Schema fornecido e no idioma ${idiomaTexto}.`,
       responseMimeType: "application/json",
       responseSchema: FinalizeSchema,
       temperature: 0.2
