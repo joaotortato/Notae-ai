@@ -41,15 +41,30 @@ export default function Home() {
   // Idioma selecionado
   const [idioma, setIdioma] = useState<'pt' | 'en' | 'fr'>('pt');
 
-  useEffect(() => {
-    setDataAula(
-      new Date().toLocaleDateString('pt-BR', {
-        day: 'numeric',
-        month: 'long',
-        year: 'numeric'
-      })
-    );
+  const [notasAtuais, setNotasAtuais] = useState('');
+  const [itensEmProcessamento, setItensEmProcessamento] = useState<number>(0);
+  const [finalizandoAula, setFinalizandoAula] = useState(false);
+  
+  const [arquivo, setArquivo] = useState<{ nome: string; base64: string; mimeType: string } | null>(null);
+  const fileInputRef = useRef<HTMLInputElement>(null);
 
+  const [tema, setTema] = useState<'azul' | 'verde' | 'indigo'>('azul');
+  const [metodoPadrao, setMetodoPadrao] = useState<'cornell' | 'topicos' | 'visual'>('cornell');
+
+  const [topicos, setTopicos] = useState<Topico[]>([]);
+  const [resumoExecutivo, setResumoExecutivo] = useState('');
+  const [flashcards, setFlashcards] = useState<{ frente: string; verso: string }[]>([]);
+
+  // 1. CARREGAR DADOS AO INICIAR (Auto-load de segurança)
+  useEffect(() => {
+    // Carrega data atual padrão em formato legível
+    const hoje = new Date().toLocaleDateString('pt-BR', {
+      day: 'numeric',
+      month: 'long',
+      year: 'numeric'
+    });
+
+    // Carregar pastas salvas
     const pastasSalvas = localStorage.getItem('notae_pastas');
     if (pastasSalvas) {
       try {
@@ -58,7 +73,51 @@ export default function Home() {
         console.error("Erro ao carregar pastas:", e);
       }
     }
+
+    // Carregar rascunho anterior caso a aba tenha sido fechada
+    const rascunhoSalvo = localStorage.getItem('notae_documento_atual');
+    if (rascunhoSalvo) {
+      try {
+        const dados = JSON.parse(rascunhoSalvo);
+        if (dados.disciplina !== undefined) setDisciplina(dados.disciplina);
+        if (dados.tituloAula !== undefined) setTituloAula(dados.tituloAula);
+        if (dados.dataAula) setDataAula(dados.dataAula);
+        else setDataAula(hoje);
+        if (dados.topicos) setTopicos(dados.topicos);
+        if (dados.resumoExecutivo !== undefined) setResumoExecutivo(dados.resumoExecutivo);
+        if (dados.flashcards) setFlashcards(dados.flashcards);
+        if (dados.idioma) setIdioma(dados.idioma);
+        if (dados.tema) setTema(dados.tema);
+        if (dados.metodoPadrao) setMetodoPadrao(dados.metodoPadrao);
+        if (dados.notasAtuais) setNotasAtuais(dados.notasAtuais);
+      } catch (e) {
+        console.error("Erro ao recuperar sessão salva:", e);
+        setDataAula(hoje);
+      }
+    } else {
+      setDataAula(hoje);
+    }
   }, []);
+
+  // 2. SALVAMENTO AUTOMÁTICO DO DOCUMENTO NO LOCALSTORAGE (Auto-save)
+  useEffect(() => {
+    // Só salva se houver conteúdo em elaboração
+    if (disciplina || tituloAula || topicos.length > 0 || resumoExecutivo || notasAtuais) {
+      const estadoAtual = {
+        disciplina,
+        tituloAula,
+        dataAula,
+        topicos,
+        resumoExecutivo,
+        flashcards,
+        idioma,
+        tema,
+        metodoPadrao,
+        notasAtuais
+      };
+      localStorage.setItem('notae_documento_atual', JSON.stringify(estadoAtual));
+    }
+  }, [disciplina, tituloAula, dataAula, topicos, resumoExecutivo, flashcards, idioma, tema, metodoPadrao, notasAtuais]);
 
   const salvarPastas = (novas: string[]) => {
     setPastas(novas);
@@ -83,20 +142,6 @@ export default function Home() {
     salvarPastas(atualizadas);
     if (disciplina === nome) setDisciplina('');
   };
-
-  const [notasAtuais, setNotasAtuais] = useState('');
-  const [itensEmProcessamento, setItensEmProcessamento] = useState<number>(0);
-  const [finalizandoAula, setFinalizandoAula] = useState(false);
-  
-  const [arquivo, setArquivo] = useState<{ nome: string; base64: string; mimeType: string } | null>(null);
-  const fileInputRef = useRef<HTMLInputElement>(null);
-
-  const [tema, setTema] = useState<'azul' | 'verde' | 'indigo'>('azul');
-  const [metodoPadrao, setMetodoPadrao] = useState<'cornell' | 'topicos' | 'visual'>('cornell');
-
-  const [topicos, setTopicos] = useState<Topico[]>([]);
-  const [resumoExecutivo, setResumoExecutivo] = useState('');
-  const [flashcards, setFlashcards] = useState<{ frente: string; verso: string }[]>([]);
 
   const paletas = {
     azul: {
@@ -131,7 +176,6 @@ export default function Home() {
     document.execCommand(comando, false, valor);
   };
 
-  // Suporte a Arquivo via Seleção Local
   const handleFileChange = (e: React.ChangeEvent<HTMLInputElement>) => {
     const file = e.target.files?.[0];
     if (!file) return;
@@ -149,7 +193,6 @@ export default function Home() {
     reader.readAsDataURL(file);
   };
 
-  // Suporte a Colar Imagem da Área de Transferência (Ctrl + V / Print)
   const processarItemClipboard = (item: DataTransferItem) => {
     if (item.type.indexOf('image') !== -1) {
       const file = item.getAsFile();
@@ -185,10 +228,10 @@ export default function Home() {
     if (fileInputRef.current) fileInputRef.current.value = '';
   };
 
-  // Limpar Documento para Começar Nova Aula
+  // Limpar Documento (reseta estado e memória local do rascunho)
   const handleLimparDocumento = () => {
-    if (topicos.length === 0 && !resumoExecutivo) return;
-    const confirmacao = window.confirm("Deseja iniciar um novo documento em branco? Todo o conteúdo gerado nesta aula será limpo.");
+    if (topicos.length === 0 && !resumoExecutivo && !tituloAula && !notasAtuais) return;
+    const confirmacao = window.confirm("Deseja iniciar um novo documento em branco? O conteúdo do documento atual será apagado.");
     if (confirmacao) {
       setTopicos([]);
       setResumoExecutivo('');
@@ -196,6 +239,7 @@ export default function Home() {
       setTituloAula('');
       setNotasAtuais('');
       handleRemoverArquivo();
+      localStorage.removeItem('notae_documento_atual');
     }
   };
 
@@ -255,6 +299,7 @@ export default function Home() {
       setItensEmProcessamento(prev => Math.max(0, prev - 1));
     }
   };
+
   useEffect(() => {
     const handleKeyDownGlobal = (e: KeyboardEvent) => {
       if ((e.ctrlKey || e.metaKey) && e.key === 'Enter') {
@@ -303,8 +348,29 @@ export default function Home() {
     }
   };
 
+  // EXPORTAR PDF COM NOME PADRONIZADO (Título da Aula + Data Numérica)
   const handleExportPDF = () => {
+    const dataObj = new Date();
+    const dia = String(dataObj.getDate()).padStart(2, '0');
+    const mes = String(dataObj.getMonth() + 1).padStart(2, '0');
+    const ano = dataObj.getFullYear();
+    const dataNumerica = `${dia}-${mes}-${ano}`;
+
+    // Sanitiza o título para nome de arquivo válido
+    const tituloLimpo = (tituloAula || disciplina || 'Aula')
+      .trim()
+      .replace(/[\/\\:*?"<>|]/g, '')
+      .replace(/\s+/g, '_');
+
+    const tituloOriginal = document.title;
+    document.title = `${tituloLimpo}_${dataNumerica}`;
+
     window.print();
+
+    // Restaura o título da página após acionar a janela de impressão
+    setTimeout(() => {
+      document.title = tituloOriginal;
+    }, 1000);
   };
 
   return (
@@ -525,7 +591,7 @@ export default function Home() {
                   type="text" 
                   value={tituloAula} 
                   onChange={(e) => setTituloAula(e.target.value)}
-                  placeholder="Ex: Análise de Arcos Triarticulados"
+                  placeholder="Ex: Análise Estrutural"
                   className="w-full text-xs p-2.5 rounded-lg border border-slate-300 bg-white text-slate-900 focus:outline-indigo-600 font-medium" 
                 />
               </div>
@@ -539,12 +605,6 @@ export default function Home() {
                 rows={6}
                 value={notasAtuais}
                 onChange={(e) => setNotasAtuais(e.target.value)}
-                onKeyDown={(e) => {
-                  if (e.key === 'Enter' && (e.ctrlKey || e.metaKey)) {
-                    e.preventDefault();
-                    handleConsolidar();
-                  }
-                }}
                 placeholder="Escreva anotações ou termos-chave. Use Ctrl + Enter para enviar..."
                 className="w-full text-xs p-3 rounded-lg border border-slate-300 bg-white text-slate-900 focus:outline-indigo-600 resize-none leading-relaxed font-sans"
               />
@@ -555,7 +615,7 @@ export default function Home() {
               <label className="text-[11px] font-semibold text-slate-600 flex items-center justify-between">
                 <span>Anexo Multimodal</span>
                 <span className="text-[10px] text-indigo-600 font-normal flex items-center gap-1">
-                  <Clipboard className="w-3 h-3" /> Pode colar prints diretamente com Ctrl + V
+                  <Clipboard className="w-3 h-3" /> Cole prints diretamente com Ctrl + V
                 </span>
               </label>
               
@@ -627,7 +687,7 @@ export default function Home() {
         {/* COLUNA DIREITA: CADERNO DE ESTUDOS */}
         <section className="lg:col-span-7 bg-slate-100 p-4 lg:p-8 overflow-y-auto h-full flex flex-col items-center pb-28 print:p-0 print:bg-white print:w-full print:h-auto print:overflow-visible print:pb-0">
           
-          {/* BARRA DE FERRAMENTAS DOCS STICKY */}
+          {/* BARRA DE FERRAMENTAS DOCS (OCULTADA NO PRINT COM .no-print) */}
           <div className="no-print w-full max-w-3xl mb-4 bg-white border border-slate-200 rounded-xl px-3 py-2 shadow-xs flex flex-wrap items-center justify-between gap-2 sticky top-0 z-20">
             <div className="flex items-center gap-1 text-slate-700">
               <span className="text-[11px] font-bold uppercase tracking-wider text-slate-400 mr-2 flex items-center gap-1">
@@ -711,7 +771,7 @@ export default function Home() {
             </div>
 
             <span className="text-[10px] text-slate-400 hidden sm:inline">
-              Edição direta habilitada em todo o documento
+              Edição direta ativa
             </span>
           </div>
 
@@ -726,6 +786,7 @@ export default function Home() {
                     contentEditable 
                     suppressContentEditableWarning
                     data-placeholder="Nome da Disciplina"
+                    onBlur={(e) => setDisciplina(e.currentTarget.textContent || '')}
                     className={`text-[11px] font-extrabold uppercase tracking-widest outline-none focus:bg-slate-50 p-1 rounded empty:before:content-[attr(data-placeholder)] empty:before:text-slate-300 ${estiloAtual.accent}`}
                   >
                     {disciplina}
@@ -737,6 +798,7 @@ export default function Home() {
                       suppressContentEditableWarning
                       suppressHydrationWarning
                       title="Clique para editar a data"
+                      onBlur={(e) => setDataAula(e.currentTarget.textContent?.replace('📅 ', '') || '')}
                       className="text-[11px] font-medium text-slate-500 bg-slate-50 px-2.5 py-1 rounded-md border border-slate-200 outline-none focus:bg-white"
                     >
                       📅 {dataAula || 'Definir data'}
@@ -751,6 +813,7 @@ export default function Home() {
                   contentEditable 
                   suppressContentEditableWarning
                   data-placeholder="Título da Aula / Assunto Principal"
+                  onBlur={(e) => setTituloAula(e.currentTarget.textContent || '')}
                   className="text-2xl lg:text-3xl font-extrabold text-slate-900 mt-2 leading-tight outline-none focus:bg-slate-50 p-1 rounded empty:before:content-[attr(data-placeholder)] empty:before:text-slate-300"
                 >
                   {tituloAula}
@@ -770,6 +833,7 @@ export default function Home() {
                   <div 
                     contentEditable 
                     suppressContentEditableWarning
+                    onBlur={(e) => setResumoExecutivo(e.currentTarget.textContent || '')}
                     className="text-xs text-slate-700 leading-relaxed font-normal outline-none focus:bg-white/80 p-1 rounded"
                   >
                     {resumoExecutivo}
@@ -1113,18 +1177,19 @@ export default function Home() {
 
       </main>
 
-      {/* REGRAS DE IMPRESSÃO / PDF MULTI-PÁGINAS CORRIGIDAS */}
+      {/* REGRAS DE IMPRESSÃO / PDF LIMPO */}
       <style jsx global>{`
         @media print {
-          /* 1. Oculta tudo o que não deve sair na folha */
+          /* Remove ferramentas de edição, cabeçalho da página e coluna esquerda */
           .no-print, 
           header, 
           nav, 
-          section:first-of-type {
+          section:first-of-type,
+          div[class*="z-20"] {
             display: none !important;
           }
 
-          /* 2. Destrava alturas e rolagens da raiz e dos containers pais */
+          /* Libera o fluxo de páginas verticais contínuas */
           html, 
           body, 
           div[class*="h-screen"],
@@ -1140,7 +1205,6 @@ export default function Home() {
             padding: 0 !important;
           }
 
-          /* 3. Garante que a coluna direita ocupe a largura completa sem grid/flex */
           main {
             display: block !important;
           }
@@ -1153,7 +1217,6 @@ export default function Home() {
             margin: 0 !important;
           }
 
-          /* 4. A folha A4 não pode ter limites de tamanho na impressão */
           div[class*="max-w-3xl"] {
             max-width: 100% !important;
             width: 100% !important;
@@ -1165,7 +1228,6 @@ export default function Home() {
             display: block !important;
           }
 
-          /* 5. Regras para evitar que tópicos fiquem cortados ao meio entre duas folhas */
           article {
             break-inside: avoid-page !important;
             page-break-inside: avoid !important;
@@ -1175,7 +1237,6 @@ export default function Home() {
             display: block !important;
           }
 
-          /* 6. Preserva as cores dos marca-textos e destaques na impressão */
           mark, span, div {
             -webkit-print-color-adjust: exact !important;
             print-color-adjust: exact !important;
